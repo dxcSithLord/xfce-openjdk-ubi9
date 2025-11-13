@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session>
+  <general>
+    <PromptOnLogout value="false"/>
+    <SaveOnExit value="false"/>
+    <SessionName value="Default"/>
+    <AutoSave value="false"/>
+  </general>
+  <startup>
+    <item name="xfwm4" priority="50"/>
+    <item name="xfce4-panel" priority="25"/>
+    <item name="xfdesktop" priority="35"/>
+    <item name="xfce4-screensaver" priority="10"/>
+  </startup>
+  <shutdown>
+    <item command="xfce4-session-logout" priority="10"/>
+  </shutdown>
+</session>
