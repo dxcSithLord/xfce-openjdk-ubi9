@@ -68,10 +68,9 @@ RUN dnf install -y --nodocs \
         man-pages 2>/dev/null || true && \
     dnf autoremove -y && \
     dnf clean all && \
-    rm -rf /var/cache/dnf /tmp/* /var/tmp/*
-
+    rm -rf /var/cache/dnf /tmp/* /var/tmp/* \
 # Create necessary directories for XFCE and supervisor
-RUN mkdir -p /etc/supervisor/conf.d /etc/xfce4
+    mkdir -p /etc/supervisor/conf.d /etc/xfce4
 
 # Copy configuration files from build context
 COPY config/xfce4-session.rc /etc/xfce4/
