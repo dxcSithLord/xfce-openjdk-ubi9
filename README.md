@@ -25,7 +25,7 @@ UBI 9.6 (Iron Bank approved base)
 
 ## Base Image Dependencies
 
-- **Base**: `registry1.dso.mil/ironbank/redhat/openjdk/openjdk21-ubi9:21.0.5`
+- **Base**: `registry1.dso.mil/ironbank/redhat/openjdk/openjdk21-runtime-ubi9-slim:1.21`
 - **EPEL Repository**: EPEL 9 for XFCE packages
 - **Security**: All Iron Bank security measures inherited
 
