@@ -14,8 +14,8 @@ tags:
 
 # Build args passed to Dockerfile ARGs
 args:
-  BASE_IMAGE: "ironbank/redhat/openjdk/openjdk21-ubi9"
-  BASE_TAG: "21.0.5"
+  BASE_IMAGE: "redhat/openjdk/openjdk21-runtime-ubi9-slim"
+  BASE_TAG: "1.21"
 
 # Docker image labels
 labels:
@@ -43,7 +43,7 @@ resources:
   filename: "epel-release-latest-9.noarch.rpm"
   validation:
     type: sha256
-    value: "PLACEHOLDER_EPEL_HASH_NEEDS_CALCULATION"
+    value: "f37633d205b3af14ced35e858da38c6275b12b16f7e8d3f809af725c7077cec5"
 
 # List of project maintainers
 maintainers:
