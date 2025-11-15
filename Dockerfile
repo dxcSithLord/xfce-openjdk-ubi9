@@ -9,10 +9,11 @@ ARG BASE_TAG=1.21
 FROM ${BASE_REGISTRY}/${BASE_IMAGE}:${BASE_TAG}
 
 # Labels will be set in hardening_manifest.yaml per Iron Bank requirements
+COPY epel-release-latest-9.noarch.rpm /tmp/.
 
 # Install EPEL repository following Red Hat best practices and XFCE packages
 RUN subscription-manager repos --enable codeready-builder-for-rhel-9-$(arch)-rpms 2>/dev/null || true && \
-    dnf install -y --nodocs https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
+    dnf install -y --nodocs /tmp/epel-release-latest-9.noarch.rpm && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
