@@ -144,7 +144,7 @@ class IronBankTreeTraversal:
         try:
             return yaml.safe_load(manifest_content)
         except yaml.YAMLError as e:
-            raise ValueError(f"Failed to parse YAML: {e}")
+            raise ValueError(f"Failed to parse YAML: {e}") from e
 
     def extract_base_info(self, manifest: Dict[str, Any]) -> tuple:
         """
@@ -446,12 +446,12 @@ class IronBankTreeTraversal:
 
         # Now fetch the manifest content
         if is_local_file:
-            with open(start_path, 'r') as f:
+            with open(start_path, 'r', encoding='utf-8') as f:
                 manifest_content = f.read()
         else:
             try:
                 manifest_content = self.fetch_manifest_from_repo(repo_path)
-            except Exception as e:
+            except (ConnectionError, urllib.error.URLError, OSError) as e:
                 node = ContainerNode(
                     name=repo_path.split("/")[-1],
                     repository=repo_path,
