@@ -192,14 +192,37 @@ class IronBankTreeTraversal:
         """
         Check if a repository is a terminal base (no further dependencies).
 
+        Only matches when repo_name exactly equals a terminal base or has
+        the terminal base as a distinct suffix with token boundary.
+        e.g., "ubi9" matches, "foo-ubi9" matches, but "openjdk21-ubi9" does NOT
+        match because we want to traverse into openjdk containers.
+
         Args:
             repo_path: Repository path to check
 
         Returns:
             True if this is a terminal base image
         """
+        import re
         repo_name = repo_path.split("/")[-1].lower()
-        return any(base in repo_name for base in self.TERMINAL_BASES)
+
+        for base in self.TERMINAL_BASES:
+            # Match if repo_name exactly equals the base
+            if repo_name == base:
+                return True
+            # Match if base appears at end with non-alphanumeric boundary
+            # e.g., "9.x/ubi9" -> repo_name="ubi9" matches
+            # but "openjdk21-ubi9" should NOT match (it's not a terminal)
+            # Terminal bases are standalone repos like "ubi9", not suffixes
+            pattern = rf'(^|[^a-z0-9]){re.escape(base)}$'
+            if re.search(pattern, repo_name):
+                # Additional check: exclude if there's a product name prefix
+                # like "openjdk21-ubi9" or "nodejs18-ubi9"
+                if re.match(rf'^[a-z]+\d+[-_]{re.escape(base)}$', repo_name):
+                    continue  # This is a product container, not terminal
+                return True
+
+        return False
 
     def normalize_repo_path(self, base_image: str) -> str:
         """
