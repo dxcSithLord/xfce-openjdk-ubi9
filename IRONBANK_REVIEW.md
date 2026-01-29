@@ -394,7 +394,7 @@ curl -s "https://repo1.dso.mil/api/v4/projects/dsop%2Fredhat%2Fubi%2F9.x%2Fubi9/
    - Monitor: [Iron Bank OpenJDK Repository](https://repo1.dso.mil/dsop/redhat/openjdk/)
 
 2. **ArchiMate Tool**: Update from 5.4.0 to 5.7.0
-   - New download URL: `https://github.com/archimatetool/archi/releases/download/v5.7.0/Archi.Linux.gtk.x86_64.tar.gz`
+   - New download URL: `New download URL: `https://github.com/archimatetool/archi.io/releases/download/5.7.0/Archi-Linux-5.7.0.tgz`
    - Update tags, hardening_manifest, and README files
 
 ### Documentation Updates
