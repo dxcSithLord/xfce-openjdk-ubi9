@@ -50,6 +50,7 @@ docker:
     commands:
       - command: find /usr/bin -perm /4000 | wc -l
         timeout_seconds: 30
+        expected_output: "0"  # or your expected SUID binary count
       - command: ls -la /etc/passwd
         timeout_seconds: 30
         expected_output: "-rw-r--r--"
