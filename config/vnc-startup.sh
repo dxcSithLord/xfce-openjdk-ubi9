@@ -46,13 +46,28 @@ log "X server successfully started on display $DISPLAY"
 export DISPLAY
 
 # Start x11vnc VNC server
+# VNC authentication (default: no password for development, should be configured for production)
+VNC_PASSWORD=${VNC_PASSWORD:-}
+
+# Start x11vnc VNC server
 log "Starting x11vnc VNC server on port $VNC_PORT..."
+
+if [ -n "$VNC_PASSWORD" ]; then
+    # Create password file if VNC_PASSWORD is set
+    mkdir -p /root/.vnc
+    x11vnc -storepasswd "$VNC_PASSWORD" /root/.vnc/passwd
+    VNC_AUTH_ARGS="-rfbauth /root/.vnc/passwd"
+else
+    log "WARNING: VNC running without password authentication"
+    VNC_AUTH_ARGS="-nopw"
+fi
+
 x11vnc -display $DISPLAY \
        -forever \
        -shared \
        -rfbport $VNC_PORT \
        -bg \
-       -nopw \
+       $VNC_AUTH_ARGS \
        -cursor arrow \
        -o /tmp/x11vnc.log
 
