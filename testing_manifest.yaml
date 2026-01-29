@@ -1,0 +1,121 @@
+docker:
+  - name: "EPEL Repository Test"
+    description: "Verify EPEL repository is properly installed and accessible"
+    commands:
+      - command: rpm -qi epel-release
+        timeout_seconds: 30
+        expected_output: "Name        : epel-release"
+      - command: dnf repolist | grep -i epel
+        timeout_seconds: 30
+        expected_output: "epel"
+
+  - name: "XFCE Desktop Environment Test"
+    description: "Verify XFCE components are installed and accessible"
+    commands:
+      - command: which xfce4-session
+        timeout_seconds: 30
+        expected_output: "/usr/bin/xfce4-session"
+      - command: which xfwm4
+        timeout_seconds: 30
+        expected_output: "/usr/bin/xfwm4"
+      - command: which xfce4-panel
+        timeout_seconds: 30
+        expected_output: "/usr/bin/xfce4-panel"
+      - command: which thunar
+        timeout_seconds: 30
+        expected_output: "/usr/bin/thunar"
+
+  - name: "VNC Server Test"
+    description: "Verify VNC server components are available"
+    commands:
+      - command: which x11vnc
+        timeout_seconds: 30
+        expected_output: "/usr/bin/x11vnc"
+      - command: which Xvfb
+        timeout_seconds: 30
+        expected_output: "/usr/bin/Xvfb"
+
+  - name: "Java Runtime Test"
+    description: "Verify Java 21 runtime inherited from base image"
+    commands:
+      - command: java -version
+        timeout_seconds: 30
+        expected_output: "openjdk version \"21"
+      - command: echo $JAVA_HOME
+        timeout_seconds: 30
+        expected_output: "/usr/lib/jvm/java-21-openjdk"
+
+  - name: "Security Compliance Test"
+    description: "Verify security hardening measures are in place"
+    commands:
+      - command: find /usr/bin -perm /4000 | wc -l
+        timeout_seconds: 30
+        expected_output: "0"  # or your expected SUID binary count
+      - command: ls -la /etc/passwd
+        timeout_seconds: 30
+        expected_output: "-rw-r--r--"
+
+  - name: "Font Installation Test"
+    description: "Verify essential fonts are installed for GUI applications"
+    commands:
+      - command: fc-list | grep -i liberation | head -1
+        timeout_seconds: 30
+      - command: fc-list | grep -i dejavu | head -1
+        timeout_seconds: 30
+
+  - name: "XFCE Configuration Test"
+    description: "Verify XFCE configuration files are properly installed"
+    commands:
+      - command: test -f /etc/xfce4/xfce4-session.rc
+        timeout_seconds: 30
+      - command: test -x /usr/local/bin/vnc-startup.sh
+        timeout_seconds: 30
+
+kubernetes:
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+  ports:
+    - name: vnc
+      containerPort: 5901
+      protocol: TCP
+
+  env:
+    - name: DISPLAY
+      value: ":1"
+    - name: VNC_PORT
+      value: "5901"
+    - name: VNC_RESOLUTION
+      value: "1280x1024"
+    - name: VNC_COL_DEPTH
+      value: "24"
+
+  livenessProbe:
+    exec:
+      command:
+        - pgrep
+        - -f
+        - supervisord
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    exec:
+      command:
+        - test
+        - -f
+        - /tmp/supervisord.pid
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  command: ["/usr/local/bin/docker-entrypoint.sh"]
+  args: ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

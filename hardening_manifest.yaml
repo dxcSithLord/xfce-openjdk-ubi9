@@ -1,0 +1,56 @@
+apiVersion: v1
+
+# The repository name in registry1, excluding /ironbank/
+name: "opensource/xfce/xfce-openjdk21"
+
+# List of tags to push for the repository in registry1
+# The most specific version should be the first tag and will be shown
+# on ironbank.dso.mil
+tags:
+- "4.18-openjdk21.0.5-ubi9.6"
+- "4.18-openjdk21.0.5"
+- "4.18-openjdk21"
+- "latest"
+
+# Build args passed to Dockerfile ARGs
+args:
+  BASE_IMAGE: "redhat/openjdk/openjdk21-runtime-ubi9-slim"
+  BASE_TAG: "1.21"
+
+# Docker image labels
+labels:
+  org.opencontainers.image.title: "XFCE Desktop with OpenJDK 21"
+  # Human-readable description of the software packaged in the image
+  org.opencontainers.image.description: "XFCE desktop environment with OpenJDK 21 runtime for secure GUI Java applications and remote desktop access using EPEL packages"
+  # License(s) under which contained software is distributed
+  org.opencontainers.image.licenses: "GPL-2.0-or-later"
+  # URL to find more information on the image
+  org.opencontainers.image.url: "https://xfce.org/"
+  # Name of the distributing entity, organization or individual
+  org.opencontainers.image.vendor: "XFCE Development Team"
+  org.opencontainers.image.version: "4.18"
+  # Keywords to help with search (ex. "cicd,gitops,golang")
+  mil.dso.ironbank.image.keywords: "desktop,gui,xfce,vnc,java,openjdk,remote-desktop,intermediate,epel"
+  # This value can be "opensource" or "commercial"
+  mil.dso.ironbank.image.type: "opensource"
+  # Product the image belongs to for grouping multiple images
+  mil.dso.ironbank.product.name: "xfce-openjdk21"
+
+# List of resources to make available to the offline build context
+resources:
+# EPEL Release package for XFCE packages (standard Iron Bank practice)
+- url: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
+  filename: "epel-release-latest-9.noarch.rpm"
+  validation:
+    type: sha256
+    value: "f37633d205b3af14ced35e858da38c6275b12b16f7e8d3f809af725c7077cec5"
+
+# List of project maintainers
+maintainers:
+- email: "admin@example.com"
+  # The name of the current container owner
+  name: "Container Admin"
+  # The gitlab username of the current container owner
+  username: "container.admin"
+  # True only for members of the Iron Bank Container Hardening Team
+  cht_member: false
