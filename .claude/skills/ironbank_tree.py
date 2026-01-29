@@ -17,6 +17,7 @@ Usage:
 import os
 import sys
 import json
+import time
 import yaml
 import urllib.request
 import urllib.error
@@ -166,12 +167,61 @@ class IronBankTreeTraversal:
 
         return base_image, base_tag, base_registry
 
+    def _fetch_url_with_retry(self, url: str, max_retries: int = 4) -> Optional[str]:
+        """
+        Fetch a URL with exponential backoff retry logic.
+
+        Args:
+            url: URL to fetch
+            max_retries: Maximum number of retry attempts (default: 4)
+
+        Returns:
+            Response content as string, or None if 404
+
+        Raises:
+            ConnectionError: If all retries fail with non-404 errors
+        """
+        backoff_delays = [2, 4, 8, 16]  # Exponential backoff: 2s, 4s, 8s, 16s
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "IronBank-Tree-Traversal/1.0"
+                })
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    return response.read().decode('utf-8')
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    return None  # 404 is not retryable
+                last_error = e
+                # Log retry for non-404 HTTP errors
+                if attempt < max_retries - 1:
+                    delay = backoff_delays[attempt]
+                    print(f"[RETRY] HTTP {e.code} fetching {url}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})", file=sys.stderr)
+                    time.sleep(delay)
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                last_error = e
+                # Log retry for network/timeout errors
+                if attempt < max_retries - 1:
+                    delay = backoff_delays[attempt]
+                    print(f"[RETRY] Network error fetching {url}: {e}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})", file=sys.stderr)
+                    time.sleep(delay)
+
+        # All retries exhausted
+        if last_error:
+            print(f"[ERROR] Failed to fetch {url} after {max_retries} attempts: {last_error}", file=sys.stderr)
+            raise ConnectionError(f"Failed to fetch {url} after {max_retries} attempts: {last_error}")
+        return None
+
     def fetch_manifest_from_repo(self, repo_path: str, branch: str = "development") -> Optional[str]:
         """
         Fetch hardening_manifest.yaml from a GitLab repository.
 
         Uses IRONBANK_RAW_URL if set (with {path} placeholder replaced),
         otherwise falls back to constructing URL from IRONBANK_REPO_URL.
+        Includes retry logic with exponential backoff (2s, 4s, 8s, 16s) for
+        network errors and non-404 HTTP errors.
 
         Args:
             repo_path: Repository path (e.g., 'redhat/openjdk/openjdk21-ubi9')
@@ -194,24 +244,18 @@ class IronBankTreeTraversal:
         last_error = None
         for url_source, url in urls_to_try:
             try:
-                req = urllib.request.Request(url, headers={
-                    "User-Agent": "IronBank-Tree-Traversal/1.0"
-                })
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    return response.read().decode('utf-8')
-            except urllib.error.HTTPError as e:
-                if e.code == 404:
-                    last_error = None  # 404 is expected, try next URL
-                    continue
+                result = self._fetch_url_with_retry(url)
+                if result is not None:
+                    return result
+                # result is None means 404, try next URL
+            except ConnectionError as e:
                 last_error = e
-            except urllib.error.URLError as e:
-                last_error = e
-                # Log and try next URL
+                # Try next URL source
                 continue
 
-        # If all URLs failed
+        # If all URLs failed with errors (not 404)
         if last_error:
-            raise ConnectionError(f"Failed to fetch manifest from {repo_path}: {last_error}")
+            raise last_error
         return None  # 404 from all sources
 
     def fetch_latest_tags(self, repo_path: str) -> Optional[List[str]]:

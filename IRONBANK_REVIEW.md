@@ -112,7 +112,11 @@ maintainers:
 
 ## Version Updates Available
 
-### OpenJDK 21
+> **As of 2026-01-29** - Version information below was verified on this date.
+> Re-validate all versions immediately before Iron Bank submission using the
+> [Re-validation Checklist](#pre-submission-re-validation-checklist) at the end of this section.
+
+### OpenJDK 21 (as of 2026-01-29)
 
 #### Upstream OpenJDK Release
 
@@ -138,7 +142,7 @@ maintainers:
 - To verify the exact OpenJDK version, inspect the image via: `skopeo inspect` or `docker run ... java -version`
 - Monitor [Iron Bank OpenJDK Repository](https://repo1.dso.mil/dsop/redhat/openjdk/) for tag updates
 
-### ArchiMate Tool (Archi)
+### ArchiMate Tool (Archi) (as of 2026-01-29)
 
 | Current | Latest | Status |
 |---------|--------|--------|
@@ -199,13 +203,79 @@ resources:
 
 **Note**: The download URL pattern changed from `archi/releases` to `archi.io/releases` and filename from `Archi.Linux.gtk.x86_64.tar.gz` to `Archi-Linux-5.7.0.tgz` in version 5.7.0.
 
-### UBI 9
+### UBI 9 (as of 2026-01-29)
 
 | Current | Latest | Status |
 |---------|--------|--------|
 | 9.6 | **9.7** | Update Available |
 
 UBI 9.7 is now available. Red Hat rebuilds UBI images on a 6-weekly cadence. This update should be coordinated with the Iron Bank OpenJDK base image updates.
+
+### Pre-Submission Re-validation Checklist
+
+Before submitting to Iron Bank, re-validate all version information using these sources and commands:
+
+#### 1. OpenJDK Version Verification
+
+```bash
+# Check Iron Bank OpenJDK repository for latest tags
+# (requires authenticated access to repo1.dso.mil)
+curl -s "https://repo1.dso.mil/api/v4/projects/dsop%2Fredhat%2Fopenjdk%2Fopenjdk21.x%2Fopenjdk21-runtime-ubi9-slim/repository/tags" | jq '.[0].name'
+
+# Verify actual Java version in Iron Bank image (requires registry access)
+skopeo inspect docker://registry1.dso.mil/ironbank/redhat/openjdk/openjdk21.x/openjdk21-runtime-ubi9-slim:latest | jq '.Labels'
+
+# Or run the image to check Java version
+docker run --rm registry1.dso.mil/ironbank/redhat/openjdk/openjdk21.x/openjdk21-runtime-ubi9-slim:latest java -version
+
+# Check upstream OpenJDK CVE/CPU pages
+# https://openjdk.org/groups/vulnerability/advisories/
+# https://www.oracle.com/security-alerts/
+```
+
+**Sources**:
+- [Iron Bank OpenJDK Repository](https://repo1.dso.mil/dsop/redhat/openjdk/)
+- [OpenJDK Security Advisories](https://openjdk.org/groups/vulnerability/advisories/)
+- [Oracle Critical Patch Updates](https://www.oracle.com/security-alerts/)
+
+#### 2. ArchiMate Tool Version Verification
+
+```bash
+# Check latest Archi release
+curl -s https://api.github.com/repos/archimatetool/archi/releases/latest | jq '.tag_name, .published_at'
+
+# Verify download URL and checksum file exist
+curl -I https://github.com/archimatetool/archi.io/releases/download/5.7.0/Archi-Linux-5.7.0.tgz
+curl -I https://github.com/archimatetool/archi.io/releases/download/5.7.0/Archi-5.7.0-SUMSSHA1
+```
+
+**Sources**:
+- [Archi GitHub Releases](https://github.com/archimatetool/archi/releases)
+- [Archi Official Blog](https://www.archimatetool.com/blog/)
+- [Archi Download Page](https://www.archimatetool.com/download/)
+
+#### 3. UBI 9 Version Verification
+
+```bash
+# Check Iron Bank UBI repository for latest tags
+curl -s "https://repo1.dso.mil/api/v4/projects/dsop%2Fredhat%2Fubi%2F9.x%2Fubi9/repository/tags" | jq '.[0].name'
+
+# Check Red Hat UBI release notes
+# https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/9.7_release_notes/
+```
+
+**Sources**:
+- [Iron Bank UBI Repository](https://repo1.dso.mil/dsop/redhat/ubi/9.x/ubi9)
+- [Red Hat UBI Release Notes](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/)
+- [Red Hat Container Catalog](https://catalog.redhat.com/software/containers/search)
+
+#### 4. Final Validation Reminder
+
+- [ ] All version numbers verified against sources within 24 hours of submission
+- [ ] SHA256 checksums calculated from freshly downloaded files
+- [ ] Iron Bank base image tags confirmed available in registry1.dso.mil
+- [ ] No new CVEs announced since last verification
+- [ ] Maintainer information updated with actual contact details
 
 ---
 
