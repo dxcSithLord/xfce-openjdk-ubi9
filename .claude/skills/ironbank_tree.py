@@ -579,7 +579,12 @@ class IronBankTreeTraversal:
         app_updates = []
 
         for node in sorted_nodes:
-            if node.status == ContainerStatus.UPDATE_AVAILABLE or node.latest_tag:
+            # Only include nodes that actually need updates
+            needs_update = (
+                node.status == ContainerStatus.UPDATE_AVAILABLE or
+                (node.latest_tag and node.latest_tag != node.current_tag)
+            )
+            if needs_update:
                 if node.depth >= 2:
                     base_updates.append(node)
                 elif node.depth == 1:
