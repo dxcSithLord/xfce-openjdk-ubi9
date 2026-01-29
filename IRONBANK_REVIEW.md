@@ -60,15 +60,29 @@ maintainers:
 
 ### OpenJDK 21
 
-| Current | Latest | Status |
-|---------|--------|--------|
+#### Upstream OpenJDK Release
+
+| Upstream Version | Latest Upstream | Status |
+|------------------|-----------------|--------|
 | 21.0.5 | **21.0.10** | Update Available |
 
-- Latest release: January 20, 2026
+- **Note**: Versions shown (21.0.5, 21.0.10) refer to **upstream OpenJDK semver**, not Iron Bank image tags
+- Latest upstream release: January 20, 2026
 - Contains critical security patches (CPU)
 - Next release: 21.0.11 scheduled for April 21, 2026
 
 **Source**: [OpenJDK January 2026 Critical Patch Update](https://foojay.io/today/openjdk-january-2026-critical-patch-update-and-patch-set-update-released/)
+
+#### Iron Bank Image Reference
+
+| Iron Bank Image | Tag | OpenJDK Patch Level |
+|-----------------|-----|---------------------|
+| `ironbank/redhat/openjdk/openjdk21.x/openjdk21-runtime-ubi9-slim` | 1.21 | Unknown |
+
+- Iron Bank uses its own tagging scheme (e.g., `1.21`) which does not directly map to upstream OpenJDK versions
+- The actual OpenJDK patch level contained in Iron Bank images **cannot be confirmed without authenticated registry access**
+- To verify the exact OpenJDK version, inspect the image via: `skopeo inspect` or `docker run ... java -version`
+- Monitor [Iron Bank OpenJDK Repository](https://repo1.dso.mil/dsop/redhat/openjdk/) for tag updates
 
 ### ArchiMate Tool (Archi)
 
