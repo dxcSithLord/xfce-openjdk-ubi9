@@ -150,6 +150,55 @@ maintainers:
 
 **Source**: [Archi 5.7 Released](https://www.archimatetool.com/blog/2025/09/23/archi-5-7-released/)
 
+#### Download Verification
+
+Before calculating SHA256 for the hardening manifest, verify the download using the official SHA-1 checksums:
+
+**SHA-1 Checksum File**: [Archi-5.7.0-SUMSSHA1](https://github.com/archimatetool/archi.io/releases/download/5.7.0/Archi-5.7.0-SUMSSHA1)
+
+```bash
+# Download ArchiMate 5.7.0
+curl -LO https://github.com/archimatetool/archi.io/releases/download/5.7.0/Archi-Linux-5.7.0.tgz
+
+# Download SHA-1 checksums
+curl -LO https://github.com/archimatetool/archi.io/releases/download/5.7.0/Archi-5.7.0-SUMSSHA1
+
+# Verify download (extract Linux checksum and verify)
+grep "Archi-Linux-5.7.0.tgz" Archi-5.7.0-SUMSSHA1 | sha1sum -c -
+
+# Generate SHA256 for hardening_manifest.yaml
+sha256sum Archi-Linux-5.7.0.tgz
+```
+
+#### Updated hardening_manifest.yaml Fields for 5.7.0
+
+```yaml
+name: "opensource/archi/archimate-kasm"
+
+tags:
+- "5.7.0-kasm-xfce4.18-ubi9.7"
+- "5.7.0-kasm-xfce4.18"
+- "5.7.0-kasm"
+- "latest"
+
+args:
+  BASE_IMAGE: "ironbank/opensource/xfce/xfce-openjdk21"
+  BASE_TAG: "4.18-openjdk21.0.10-ubi9.7"
+  ARCHI_FILENAME: "Archi-Linux-5.7.0.tgz"
+
+labels:
+  org.opencontainers.image.version: "5.7.0"
+
+resources:
+- url: "https://github.com/archimatetool/archi.io/releases/download/5.7.0/Archi-Linux-5.7.0.tgz"
+  filename: "Archi-Linux-5.7.0.tgz"
+  validation:
+    type: sha256
+    value: "<CALCULATE_AFTER_SHA1_VERIFICATION>"
+```
+
+**Note**: The download URL pattern changed from `archi/releases` to `archi.io/releases` and filename from `Archi.Linux.gtk.x86_64.tar.gz` to `Archi-Linux-5.7.0.tgz` in version 5.7.0.
+
 ### UBI 9
 
 | Current | Latest | Status |
