@@ -84,11 +84,11 @@ maintainers:
 
 ### UBI 9
 
-| Current | Status |
-|---------|--------|
-| 9.6 | Current |
+| Current | Latest | Status |
+|---------|--------|--------|
+| 9.6 | **9.7** | Update Available |
 
-UBI 9.6 appears to be current. Red Hat rebuilds UBI images on a 6-weekly cadence.
+UBI 9.7 is now available. Red Hat rebuilds UBI images on a 6-weekly cadence. This update should be coordinated with the Iron Bank OpenJDK base image updates.
 
 ---
 
@@ -224,12 +224,26 @@ UBI 9.6 appears to be current. Red Hat rebuilds UBI images on a 6-weekly cadence
 
 | File | Changes Required |
 |------|------------------|
-| xfce-hardening_manifest.yaml | BASE_TAG, tags, SHA256 hash |
+| xfce-hardening_manifest.yaml | BASE_TAG, tags (ubi9.6→ubi9.7), SHA256 hash |
 | xfce-Dockerfile | BASE_TAG |
-| xfce-README.md | Version references |
-| archimate-hardening_manifest.yaml | BASE_TAG, tags, ArchiMate URL, SHA256 hash |
-| archimate-Dockerfile | BASE_TAG, ARCHI version in tags |
-| archimate-README.md | Version references |
+| xfce-README.md | Version references (ubi9.6→ubi9.7) |
+| archimate-hardening_manifest.yaml | BASE_TAG, tags (ubi9.6→ubi9.7), ArchiMate URL, SHA256 hash |
+| archimate-Dockerfile | BASE_TAG (ubi9.6→ubi9.7) |
+| archimate-README.md | Version references (ubi9.6→ubi9.7) |
+| PROJECT_ORGANIZATION.md | UBI version reference |
+
+### Files Affected by UBI 9.7 Update
+
+The following files contain references to UBI 9.6 that need updating to 9.7:
+
+| File | Line | Current Value |
+|------|------|---------------|
+| xfce-hardening_manifest.yaml | 10 | `4.18-openjdk21.0.5-ubi9.6` |
+| xfce-README.md | 14, 102, 164 | Multiple UBI 9.6 references |
+| archimate-hardening_manifest.yaml | 10, 18 | Tags and BASE_TAG with ubi9.6 |
+| archimate-Dockerfile | 7 | `BASE_TAG=4.18-openjdk21.0.5-ubi9.6` |
+| archimate-README.md | 16, 46, 106 | Multiple UBI 9.6 references |
+| PROJECT_ORGANIZATION.md | 80 | UBI 9.6 reference |
 
 ### For Immediate Fixes
 
@@ -269,8 +283,8 @@ UBI 9.6 appears to be current. Red Hat rebuilds UBI images on a 6-weekly cadence
 | Security Hardening | PASS |
 | Testing Coverage | PASS |
 | License Compliance | PASS |
-| Version Currency | UPDATES AVAILABLE |
+| Version Currency | **UPDATES AVAILABLE** (OpenJDK 21.0.10, ArchiMate 5.7.0, UBI 9.7) |
 | Resource Checksums | **FAIL - Placeholders** |
 | Maintainer Info | **FAIL - Placeholders** |
 
-**Overall Assessment**: Repository structure and security hardening are well-implemented. Critical issues with placeholder values must be resolved before Iron Bank submission. Version updates are recommended to ensure latest security patches.
+**Overall Assessment**: Repository structure and security hardening are well-implemented. Critical issues with placeholder values must be resolved before Iron Bank submission. Version updates are recommended (OpenJDK 21.0.5→21.0.10, ArchiMate 5.4.0→5.7.0, UBI 9.6→9.7) to ensure latest security patches.
