@@ -16,6 +16,60 @@ The review identified **critical issues** requiring immediate attention before I
 
 ---
 
+## Container Dependency Tree Analysis
+
+Generated using the Iron Bank Tree Traversal skill (`.claude/skills/ironbank_tree.py`).
+
+### Full Dependency Hierarchy
+
+```mermaid
+graph TD
+    subgraph "ArchiMate Container Stack"
+        A["archimate-kasm<br/>5.4.0-kasm-xfce4.18-ubi9.6"] --> B["xfce-openjdk21<br/>4.18-openjdk21.0.5-ubi9.6"]
+    end
+
+    subgraph "XFCE Container Stack"
+        B --> C["openjdk21-ubi9<br/>21.0.5"]
+        C --> D["ubi9<br/>9.6"]
+    end
+
+    B:::update
+    C:::update
+    D:::update
+
+    classDef update fill:#ffeb3b,stroke:#f57f17
+    classDef current fill:#4caf50,stroke:#2e7d32
+```
+
+### Dependency Chain Details
+
+| Depth | Container | Repository | Current Tag | Base Image | Status |
+|-------|-----------|------------|-------------|------------|--------|
+| 0 | archimate-kasm | `opensource/archi/archimate-kasm` | 5.4.0-kasm-xfce4.18-ubi9.6 | xfce-openjdk21 | Root |
+| 1 | xfce-openjdk21 | `opensource/xfce/xfce-openjdk21` | 4.18-openjdk21.0.5-ubi9.6 | openjdk21-ubi9 | Update Available |
+| 2 | openjdk21-ubi9 | `redhat/openjdk/openjdk21-ubi9` | 21.0.5 | ubi9 | Update Available |
+| 3 | ubi9 | `redhat/ubi/9.x/ubi9` | 9.6 | - | Update Available (9.7) |
+
+### Update Propagation Plan
+
+Updates must be applied **bottom-up** to maintain consistency:
+
+1. **Layer 3 (UBI)**: Wait for Iron Bank to publish UBI 9.7 base
+2. **Layer 2 (OpenJDK)**: Update `openjdk21-ubi9` when new base available
+3. **Layer 1 (XFCE)**: Update `xfce-openjdk21` BASE_TAG and image tags
+4. **Layer 0 (ArchiMate)**: Update `archimate-kasm` BASE_TAG and image tags
+
+### Iron Bank Repository Paths
+
+| Container | Iron Bank GitLab Path |
+|-----------|----------------------|
+| ArchiMate KASM | `https://repo1.dso.mil/dsop/opensource/archi/archimate-kasm` |
+| XFCE OpenJDK21 | `https://repo1.dso.mil/dsop/opensource/xfce/xfce-openjdk21` |
+| OpenJDK 21 UBI9 | `https://repo1.dso.mil/dsop/redhat/openjdk/openjdk21.x/openjdk21-ubi9` |
+| UBI 9 | `https://repo1.dso.mil/dsop/redhat/ubi/9.x/ubi9` |
+
+---
+
 ## Critical Issues (Must Fix)
 
 ### 1. Placeholder SHA256 Checksums
