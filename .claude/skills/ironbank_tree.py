@@ -181,7 +181,7 @@ class IronBankTreeTraversal:
         Raises:
             ConnectionError: If all retries fail with non-404 errors
         """
-        backoff_delays = [2, 4, 8, 16]  # Exponential backoff: 2s, 4s, 8s, 16s
+        backoff_delays = [2, 4, 8, 16]  # Exponential backoff base; last value reused
         last_error = None
 
         for attempt in range(max_retries):
@@ -197,14 +197,14 @@ class IronBankTreeTraversal:
                 last_error = e
                 # Log retry for non-404 HTTP errors
                 if attempt < max_retries - 1:
-                    delay = backoff_delays[attempt]
+                    delay = backoff_delays[min(attempt, len(backoff_delays) - 1)]
                     print(f"[RETRY] HTTP {e.code} fetching {url}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})", file=sys.stderr)
                     time.sleep(delay)
             except (urllib.error.URLError, TimeoutError, OSError) as e:
                 last_error = e
                 # Log retry for network/timeout errors
                 if attempt < max_retries - 1:
-                    delay = backoff_delays[attempt]
+                    delay = backoff_delays[min(attempt, len(backoff_delays) - 1)]
                     print(f"[RETRY] Network error fetching {url}: {e}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})", file=sys.stderr)
                     time.sleep(delay)
 
@@ -328,7 +328,7 @@ class IronBankTreeTraversal:
         Args:
             node: ContainerNode to update with status information
         """
-        if node.repository == "local":
+        if os.path.isabs(node.repository):
             # Can't determine updates for local files without more context
             return
 
