@@ -111,17 +111,22 @@ class IronBankTreeTraversal:
         "ubi9-micro", "ubi8-micro", "scratch", "distroless"
     ]
 
-    def __init__(self, repo_url: Optional[str] = None):
+    def __init__(self, repo_url: Optional[str] = None, raw_url: Optional[str] = None):
         """
         Initialize the traversal tool.
 
         Args:
             repo_url: Base URL for Iron Bank repositories
+            raw_url: URL pattern for fetching raw manifest files (use {path} placeholder)
         """
         self.repo_url = repo_url or os.environ.get(
             "IRONBANK_REPO_URL",
             "https://repo1.dso.mil/dsop"
         )
+        # IRONBANK_RAW_URL allows custom URL pattern for fetching raw files
+        # Use {path} as placeholder for repo path
+        # Default: construct from repo_url with GitLab raw file pattern
+        self.raw_url = raw_url or os.environ.get("IRONBANK_RAW_URL")
         self.tree = DependencyTree()
         self.visited = set()  # Track visited repos to prevent cycles
 
@@ -165,6 +170,9 @@ class IronBankTreeTraversal:
         """
         Fetch hardening_manifest.yaml from a GitLab repository.
 
+        Uses IRONBANK_RAW_URL if set (with {path} placeholder replaced),
+        otherwise falls back to constructing URL from IRONBANK_REPO_URL.
+
         Args:
             repo_path: Repository path (e.g., 'redhat/openjdk/openjdk21-ubi9')
             branch: Git branch to fetch from
@@ -172,21 +180,100 @@ class IronBankTreeTraversal:
         Returns:
             Manifest content as string, or None if not found
         """
-        # Construct the raw file URL
-        url = f"{self.repo_url}/{repo_path}/-/raw/{branch}/hardening_manifest.yaml"
+        urls_to_try = []
+
+        # If IRONBANK_RAW_URL is set, try it first
+        if self.raw_url:
+            custom_url = self.raw_url.replace("{path}", repo_path)
+            urls_to_try.append(("IRONBANK_RAW_URL", custom_url))
+
+        # Always include the default GitLab raw file URL as fallback
+        default_url = f"{self.repo_url}/{repo_path}/-/raw/{branch}/hardening_manifest.yaml"
+        urls_to_try.append(("IRONBANK_REPO_URL", default_url))
+
+        last_error = None
+        for url_source, url in urls_to_try:
+            try:
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "IronBank-Tree-Traversal/1.0"
+                })
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    return response.read().decode('utf-8')
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    last_error = None  # 404 is expected, try next URL
+                    continue
+                last_error = e
+            except urllib.error.URLError as e:
+                last_error = e
+                # Log and try next URL
+                continue
+
+        # If all URLs failed
+        if last_error:
+            raise ConnectionError(f"Failed to fetch manifest from {repo_path}: {last_error}")
+        return None  # 404 from all sources
+
+    def fetch_latest_tags(self, repo_path: str) -> Optional[List[str]]:
+        """
+        Fetch available tags from the GitLab repository.
+
+        Args:
+            repo_path: Repository path (e.g., 'redhat/openjdk/openjdk21-ubi9')
+
+        Returns:
+            List of tag names, or None if unable to fetch
+        """
+        # GitLab API endpoint for repository tags
+        # URL encode the repo path for the API
+        encoded_path = repo_path.replace("/", "%2F")
+        url = f"{self.repo_url}/api/v4/projects/dsop%2F{encoded_path}/repository/tags"
 
         try:
             req = urllib.request.Request(url, headers={
                 "User-Agent": "IronBank-Tree-Traversal/1.0"
             })
             with urllib.request.urlopen(req, timeout=30) as response:
-                return response.read().decode('utf-8')
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return None
-            raise
-        except urllib.error.URLError as e:
-            raise ConnectionError(f"Failed to fetch manifest from {url}: {e}")
+                data = json.loads(response.read().decode('utf-8'))
+                return [tag.get("name", "") for tag in data if tag.get("name")]
+        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
+            return None
+
+    def populate_update_status(self, node: ContainerNode) -> None:
+        """
+        Populate latest_tag and status for a container node.
+
+        Fetches available tags from the repository and determines if
+        an update is available by comparing to current_tag.
+
+        Args:
+            node: ContainerNode to update with status information
+        """
+        if node.repository == "local":
+            # Can't determine updates for local files without more context
+            return
+
+        tags = self.fetch_latest_tags(node.repository)
+
+        if tags is None:
+            # Could not fetch tags - status remains CURRENT (unknown)
+            # We don't set ERROR here since the manifest was successfully parsed
+            return
+
+        if not tags:
+            # Repository exists but has no tags - might be deprecated
+            node.status = ContainerStatus.DEPRECATED
+            return
+
+        # Get the latest tag (first in list, typically most recent)
+        latest = tags[0] if tags else None
+        node.latest_tag = latest
+
+        # Compare versions to determine if update is available
+        if latest and latest != node.current_tag:
+            # Simple comparison - if tags differ, update may be available
+            # More sophisticated version comparison could be added here
+            node.status = ContainerStatus.UPDATE_AVAILABLE
 
     def is_terminal_base(self, repo_path: str) -> bool:
         """
@@ -258,21 +345,28 @@ class IronBankTreeTraversal:
         Returns:
             Root ContainerNode of the traversed tree
         """
-        # Check for cycles
-        if start_path in self.visited:
-            return None
-        self.visited.add(start_path)
-
-        # Determine if start_path is a local file or repository
+        # Determine if start_path is a local file or repository and normalize
+        # the path BEFORE cycle detection so we use canonical repo identifiers
         manifest_content = None
-        repo_path = start_path
 
+        if os.path.isfile(start_path):
+            # For local files, use absolute path as canonical identifier
+            repo_path = os.path.abspath(start_path)
+        else:
+            # Normalize repository path to canonical form
+            repo_path = self.normalize_repo_path(start_path)
+
+        # Check for cycles using normalized path
+        if repo_path in self.visited:
+            return None
+        self.visited.add(repo_path)
+
+        # Now fetch the manifest content
         if os.path.isfile(start_path):
             with open(start_path, 'r') as f:
                 manifest_content = f.read()
-            repo_path = "local"
+            repo_path = "local"  # Reset for display purposes
         else:
-            repo_path = self.normalize_repo_path(start_path)
             try:
                 manifest_content = self.fetch_manifest_from_repo(repo_path)
             except Exception as e:
@@ -330,6 +424,9 @@ class IronBankTreeTraversal:
             depth=depth,
             manifest_data=manifest
         )
+
+        # Populate update status (latest_tag and status)
+        self.populate_update_status(node)
 
         # Add to tree
         self.tree.add_node(node)
