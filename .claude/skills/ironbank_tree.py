@@ -1,0 +1,524 @@
+#!/usr/bin/env python3
+"""
+Iron Bank Container Dependency Tree Traversal Tool
+
+This script analyzes Iron Bank container dependencies by parsing hardening_manifest.yaml
+files and recursively traversing the base image chain.
+
+Environment Variables:
+    IRONBANK_REPO_URL: Base URL for Iron Bank repositories (default: https://repo1.dso.mil/dsop)
+
+Usage:
+    python ironbank_tree.py [manifest_path_or_repo]
+    python ironbank_tree.py hardening_manifest.yaml
+    python ironbank_tree.py opensource/xfce/xfce-openjdk21
+"""
+
+import os
+import sys
+import json
+import yaml
+import urllib.request
+import urllib.error
+from dataclasses import dataclass, field, asdict
+from typing import Optional, List, Dict, Any
+from enum import Enum
+
+
+class ContainerStatus(Enum):
+    CURRENT = "current"
+    UPDATE_AVAILABLE = "update_available"
+    DEPRECATED = "deprecated"
+    NOT_FOUND = "not_found"
+    ERROR = "error"
+
+
+@dataclass
+class ContainerNode:
+    """Represents a container in the dependency tree."""
+    name: str
+    repository: str
+    current_tag: str
+    latest_tag: Optional[str] = None
+    base_image: Optional[str] = None
+    base_tag: Optional[str] = None
+    status: ContainerStatus = ContainerStatus.CURRENT
+    depth: int = 0
+    manifest_data: Dict[str, Any] = field(default_factory=dict)
+    error_message: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "name": self.name,
+            "repository": self.repository,
+            "current_tag": self.current_tag,
+            "latest_tag": self.latest_tag,
+            "base_image": self.base_image,
+            "base_tag": self.base_tag,
+            "status": self.status.value,
+            "depth": self.depth,
+            "error_message": self.error_message
+        }
+
+
+@dataclass
+class DependencyTree:
+    """Represents the full container dependency tree."""
+    root: Optional[ContainerNode] = None
+    nodes: List[ContainerNode] = field(default_factory=list)
+    edges: List[Dict[str, str]] = field(default_factory=list)
+    max_depth: int = 0
+    update_count: int = 0
+    deprecated_count: int = 0
+    error_count: int = 0
+
+    def add_node(self, node: ContainerNode) -> None:
+        """Add a node to the tree."""
+        self.nodes.append(node)
+        if node.depth > self.max_depth:
+            self.max_depth = node.depth
+        if node.status == ContainerStatus.UPDATE_AVAILABLE:
+            self.update_count += 1
+        elif node.status == ContainerStatus.DEPRECATED:
+            self.deprecated_count += 1
+        elif node.status in (ContainerStatus.NOT_FOUND, ContainerStatus.ERROR):
+            self.error_count += 1
+
+    def add_edge(self, from_repo: str, to_repo: str) -> None:
+        """Add an edge between containers."""
+        self.edges.append({"from": from_repo, "to": to_repo})
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "root": self.root.to_dict() if self.root else None,
+            "nodes": [n.to_dict() for n in self.nodes],
+            "edges": self.edges,
+            "max_depth": self.max_depth,
+            "update_count": self.update_count,
+            "deprecated_count": self.deprecated_count,
+            "error_count": self.error_count
+        }
+
+
+class IronBankTreeTraversal:
+    """Main class for traversing Iron Bank container dependencies."""
+
+    # Terminal base images that don't have further dependencies
+    TERMINAL_BASES = [
+        "ubi9", "ubi8", "ubi9-minimal", "ubi8-minimal",
+        "ubi9-micro", "ubi8-micro", "scratch", "distroless"
+    ]
+
+    def __init__(self, repo_url: Optional[str] = None):
+        """
+        Initialize the traversal tool.
+
+        Args:
+            repo_url: Base URL for Iron Bank repositories
+        """
+        self.repo_url = repo_url or os.environ.get(
+            "IRONBANK_REPO_URL",
+            "https://repo1.dso.mil/dsop"
+        )
+        self.tree = DependencyTree()
+        self.visited = set()  # Track visited repos to prevent cycles
+
+    def parse_manifest(self, manifest_content: str) -> Dict[str, Any]:
+        """
+        Parse a hardening_manifest.yaml file.
+
+        Args:
+            manifest_content: YAML content of the manifest
+
+        Returns:
+            Parsed manifest data as dictionary
+        """
+        try:
+            return yaml.safe_load(manifest_content)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Failed to parse YAML: {e}")
+
+    def extract_base_info(self, manifest: Dict[str, Any]) -> tuple:
+        """
+        Extract base image information from manifest.
+
+        Args:
+            manifest: Parsed manifest dictionary
+
+        Returns:
+            Tuple of (base_image, base_tag, base_registry)
+        """
+        args = manifest.get("args", {})
+        base_image = args.get("BASE_IMAGE", "")
+        base_tag = args.get("BASE_TAG", "")
+        base_registry = args.get("BASE_REGISTRY", "registry1.dso.mil")
+
+        # Remove ironbank/ prefix if present
+        if base_image.startswith("ironbank/"):
+            base_image = base_image[len("ironbank/"):]
+
+        return base_image, base_tag, base_registry
+
+    def fetch_manifest_from_repo(self, repo_path: str, branch: str = "development") -> Optional[str]:
+        """
+        Fetch hardening_manifest.yaml from a GitLab repository.
+
+        Args:
+            repo_path: Repository path (e.g., 'redhat/openjdk/openjdk21-ubi9')
+            branch: Git branch to fetch from
+
+        Returns:
+            Manifest content as string, or None if not found
+        """
+        # Construct the raw file URL
+        url = f"{self.repo_url}/{repo_path}/-/raw/{branch}/hardening_manifest.yaml"
+
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "IronBank-Tree-Traversal/1.0"
+            })
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return response.read().decode('utf-8')
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            raise
+        except urllib.error.URLError as e:
+            raise ConnectionError(f"Failed to fetch manifest from {url}: {e}")
+
+    def is_terminal_base(self, repo_path: str) -> bool:
+        """
+        Check if a repository is a terminal base (no further dependencies).
+
+        Args:
+            repo_path: Repository path to check
+
+        Returns:
+            True if this is a terminal base image
+        """
+        repo_name = repo_path.split("/")[-1].lower()
+        return any(base in repo_name for base in self.TERMINAL_BASES)
+
+    def normalize_repo_path(self, base_image: str) -> str:
+        """
+        Normalize repository path for Iron Bank lookup.
+
+        Args:
+            base_image: Base image path from manifest
+
+        Returns:
+            Normalized repository path
+        """
+        # Handle common path variations
+        path = base_image
+
+        # Remove registry prefix if present
+        if "/" in path and "." in path.split("/")[0]:
+            path = "/".join(path.split("/")[1:])
+
+        # Remove ironbank prefix
+        if path.startswith("ironbank/"):
+            path = path[len("ironbank/"):]
+
+        return path
+
+    def traverse(self, start_path: str, depth: int = 0) -> Optional[ContainerNode]:
+        """
+        Recursively traverse the container dependency tree.
+
+        Args:
+            start_path: Repository path or local manifest path
+            depth: Current depth in the tree
+
+        Returns:
+            Root ContainerNode of the traversed tree
+        """
+        # Check for cycles
+        if start_path in self.visited:
+            return None
+        self.visited.add(start_path)
+
+        # Determine if start_path is a local file or repository
+        manifest_content = None
+        repo_path = start_path
+
+        if os.path.isfile(start_path):
+            with open(start_path, 'r') as f:
+                manifest_content = f.read()
+            repo_path = "local"
+        else:
+            repo_path = self.normalize_repo_path(start_path)
+            try:
+                manifest_content = self.fetch_manifest_from_repo(repo_path)
+            except Exception as e:
+                node = ContainerNode(
+                    name=repo_path.split("/")[-1],
+                    repository=repo_path,
+                    current_tag="unknown",
+                    status=ContainerStatus.ERROR,
+                    depth=depth,
+                    error_message=str(e)
+                )
+                self.tree.add_node(node)
+                return node
+
+        if manifest_content is None:
+            node = ContainerNode(
+                name=repo_path.split("/")[-1],
+                repository=repo_path,
+                current_tag="unknown",
+                status=ContainerStatus.NOT_FOUND,
+                depth=depth,
+                error_message="Manifest not found"
+            )
+            self.tree.add_node(node)
+            return node
+
+        # Parse the manifest
+        try:
+            manifest = self.parse_manifest(manifest_content)
+        except ValueError as e:
+            node = ContainerNode(
+                name=repo_path.split("/")[-1],
+                repository=repo_path,
+                current_tag="unknown",
+                status=ContainerStatus.ERROR,
+                depth=depth,
+                error_message=str(e)
+            )
+            self.tree.add_node(node)
+            return node
+
+        # Extract information
+        name = manifest.get("name", repo_path.split("/")[-1])
+        tags = manifest.get("tags", [])
+        current_tag = tags[0] if tags else "latest"
+        base_image, base_tag, base_registry = self.extract_base_info(manifest)
+
+        # Create node
+        node = ContainerNode(
+            name=name,
+            repository=repo_path,
+            current_tag=current_tag,
+            base_image=base_image,
+            base_tag=base_tag,
+            depth=depth,
+            manifest_data=manifest
+        )
+
+        # Add to tree
+        self.tree.add_node(node)
+        if depth == 0:
+            self.tree.root = node
+
+        # Check if this is a terminal base
+        if self.is_terminal_base(repo_path) or not base_image:
+            return node
+
+        # Recurse to parent
+        if base_image:
+            parent_node = self.traverse(base_image, depth + 1)
+            if parent_node:
+                self.tree.add_edge(repo_path, parent_node.repository)
+
+        return node
+
+    def generate_mermaid_diagram(self) -> str:
+        """
+        Generate a Mermaid diagram of the dependency tree.
+
+        Returns:
+            Mermaid diagram as string
+        """
+        lines = ["graph TD"]
+
+        # Add nodes
+        node_ids = {}
+        for i, node in enumerate(self.tree.nodes):
+            node_id = f"N{i}"
+            node_ids[node.repository] = node_id
+            label = f"{node.name}<br/>{node.current_tag}"
+            lines.append(f'    {node_id}["{label}"]')
+
+            # Add styling based on status
+            if node.status == ContainerStatus.UPDATE_AVAILABLE:
+                lines.append(f"    {node_id}:::update")
+            elif node.status == ContainerStatus.DEPRECATED:
+                lines.append(f"    {node_id}:::deprecated")
+            elif node.status in (ContainerStatus.NOT_FOUND, ContainerStatus.ERROR):
+                lines.append(f"    {node_id}:::error")
+
+        # Add edges
+        for edge in self.tree.edges:
+            from_id = node_ids.get(edge["from"], "")
+            to_id = node_ids.get(edge["to"], "")
+            if from_id and to_id:
+                lines.append(f"    {from_id} --> {to_id}")
+
+        # Add legend
+        lines.extend([
+            "",
+            "    classDef update fill:#ffeb3b,stroke:#f57f17",
+            "    classDef deprecated fill:#ef5350,stroke:#c62828",
+            "    classDef error fill:#9e9e9e,stroke:#616161"
+        ])
+
+        return "\n".join(lines)
+
+    def generate_update_plan(self) -> str:
+        """
+        Generate an update task plan for the dependency tree.
+
+        Returns:
+            Markdown formatted update plan
+        """
+        lines = ["## Update Task Plan", ""]
+
+        # Sort nodes by depth (deepest first for bottom-up updates)
+        sorted_nodes = sorted(self.tree.nodes, key=lambda n: -n.depth)
+
+        # Group by priority
+        base_updates = []
+        intermediate_updates = []
+        app_updates = []
+
+        for node in sorted_nodes:
+            if node.status == ContainerStatus.UPDATE_AVAILABLE or node.latest_tag:
+                if node.depth >= 2:
+                    base_updates.append(node)
+                elif node.depth == 1:
+                    intermediate_updates.append(node)
+                else:
+                    app_updates.append(node)
+
+        # Generate plan sections
+        if base_updates:
+            lines.append("### Priority 1: Base Image Updates (Bottom-Up)")
+            for i, node in enumerate(base_updates, 1):
+                lines.append(f"{i}. [ ] Update {node.name}: {node.current_tag} → {node.latest_tag or 'latest'}")
+                lines.append(f"   - Repository: {node.repository}")
+                lines.append(f"   - Impact: All dependent images")
+                lines.append("")
+
+        if intermediate_updates:
+            lines.append("### Priority 2: Intermediate Images")
+            for i, node in enumerate(intermediate_updates, len(base_updates) + 1):
+                lines.append(f"{i}. [ ] Update {node.name}: {node.current_tag}")
+                lines.append(f"   - Repository: {node.repository}")
+                if node.base_image:
+                    lines.append(f"   - Depends on: {node.base_image}")
+                lines.append("")
+
+        if app_updates:
+            lines.append("### Priority 3: Application Images")
+            for i, node in enumerate(app_updates, len(base_updates) + len(intermediate_updates) + 1):
+                lines.append(f"{i}. [ ] Update {node.name}: {node.current_tag}")
+                lines.append(f"   - Repository: {node.repository}")
+                if node.base_image:
+                    lines.append(f"   - Depends on: {node.base_image}")
+                lines.append("")
+
+        if not (base_updates or intermediate_updates or app_updates):
+            lines.append("No updates required - all containers are current.")
+
+        return "\n".join(lines)
+
+    def generate_summary_table(self) -> str:
+        """
+        Generate a summary table of all containers.
+
+        Returns:
+            Markdown formatted table
+        """
+        lines = [
+            "## Dependency Chain",
+            "",
+            "| Depth | Container | Repository | Current Tag | Base Image | Status |",
+            "|-------|-----------|------------|-------------|------------|--------|"
+        ]
+
+        for node in sorted(self.tree.nodes, key=lambda n: n.depth):
+            status_emoji = {
+                ContainerStatus.CURRENT: "✅",
+                ContainerStatus.UPDATE_AVAILABLE: "⚠️",
+                ContainerStatus.DEPRECATED: "❌",
+                ContainerStatus.NOT_FOUND: "❓",
+                ContainerStatus.ERROR: "💥"
+            }.get(node.status, "")
+
+            base = node.base_image or "-"
+            if len(base) > 30:
+                base = "..." + base[-27:]
+
+            lines.append(
+                f"| {node.depth} | {node.name} | {node.repository[:40]} | "
+                f"{node.current_tag[:25]} | {base} | {status_emoji} {node.status.value} |"
+            )
+
+        return "\n".join(lines)
+
+    def generate_report(self) -> str:
+        """
+        Generate a full analysis report.
+
+        Returns:
+            Complete markdown report
+        """
+        root_name = self.tree.root.name if self.tree.root else "Unknown"
+
+        report = [
+            f"# Iron Bank Dependency Tree Analysis",
+            "",
+            f"## Container: {root_name}",
+            "",
+            f"**Total Layers**: {len(self.tree.nodes)}",
+            f"**Max Depth**: {self.tree.max_depth}",
+            f"**Updates Available**: {self.tree.update_count}",
+            f"**Deprecated**: {self.tree.deprecated_count}",
+            f"**Errors**: {self.tree.error_count}",
+            "",
+            self.generate_summary_table(),
+            "",
+            "## Dependency Diagram",
+            "",
+            "```mermaid",
+            self.generate_mermaid_diagram(),
+            "```",
+            "",
+            self.generate_update_plan()
+        ]
+
+        return "\n".join(report)
+
+
+def main():
+    """Main entry point."""
+    if len(sys.argv) < 2:
+        print("Usage: python ironbank_tree.py <manifest_path_or_repo>")
+        print("Example: python ironbank_tree.py hardening_manifest.yaml")
+        print("Example: python ironbank_tree.py opensource/xfce/xfce-openjdk21")
+        sys.exit(1)
+
+    start_path = sys.argv[1]
+
+    traversal = IronBankTreeTraversal()
+
+    try:
+        traversal.traverse(start_path)
+        report = traversal.generate_report()
+        print(report)
+
+        # Also output JSON for programmatic use
+        if "--json" in sys.argv:
+            print("\n---JSON OUTPUT---")
+            print(json.dumps(traversal.tree.to_dict(), indent=2))
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
