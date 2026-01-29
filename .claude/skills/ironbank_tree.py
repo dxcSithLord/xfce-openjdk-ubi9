@@ -263,6 +263,7 @@ class IronBankTreeTraversal:
         Fetch available tags from the GitLab repository with pagination.
 
         Pages through all GitLab results to get complete tag list.
+        Uses retry with exponential backoff (2s, 4s, 8s, 16s) for network errors.
 
         Args:
             repo_path: Repository path (e.g., 'redhat/openjdk/openjdk21-ubi9')
@@ -282,28 +283,35 @@ class IronBankTreeTraversal:
         while True:
             url = f"{base_url}?per_page={per_page}&page={page}"
             try:
-                req = urllib.request.Request(url, headers={
-                    "User-Agent": "IronBank-Tree-Traversal/1.0"
-                })
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    data = json.loads(response.read().decode('utf-8'))
+                raw = self._fetch_url_with_retry(url)
+                if raw is None:
+                    # 404
+                    if page == 1:
+                        return None
+                    break
+                data = json.loads(raw)
 
-                    # Empty list means no more pages
-                    if not data:
-                        break
+                # Empty list means no more pages
+                if not data:
+                    break
 
-                    # Extract tag names from this page
-                    page_tags = [tag.get("name", "") for tag in data if tag.get("name")]
-                    all_tags.extend(page_tags)
+                # Extract tag names from this page
+                page_tags = [tag.get("name", "") for tag in data if tag.get("name")]
+                all_tags.extend(page_tags)
 
-                    # If we got fewer than per_page, this is the last page
-                    if len(data) < per_page:
-                        break
+                # If we got fewer than per_page, this is the last page
+                if len(data) < per_page:
+                    break
 
-                    page += 1
+                page += 1
 
-            except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
-                # If first page fails, return None; otherwise return what we have
+            except ConnectionError:
+                # Retries exhausted
+                if page == 1:
+                    return None
+                break
+            except json.JSONDecodeError:
+                # Invalid response
                 if page == 1:
                     return None
                 break
