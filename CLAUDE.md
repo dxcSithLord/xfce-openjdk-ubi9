@@ -21,6 +21,7 @@ This skill traverses Iron Bank container dependency trees by:
 
 **Environment Variables**:
 - `IRONBANK_REPO_URL` - Base URL for Iron Bank GitLab (default: `https://repo1.dso.mil/dsop`)
+- `IRONBANK_RAW_URL` - Custom URL pattern for fetching raw manifests (use `{path}` placeholder)
 
 ### Iron Bank Review
 

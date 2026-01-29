@@ -258,30 +258,57 @@ class IronBankTreeTraversal:
             raise last_error
         return None  # 404 from all sources
 
-    def fetch_latest_tags(self, repo_path: str) -> Optional[List[str]]:
+    def fetch_latest_tags(self, repo_path: str, per_page: int = 100) -> Optional[List[str]]:
         """
-        Fetch available tags from the GitLab repository.
+        Fetch available tags from the GitLab repository with pagination.
+
+        Pages through all GitLab results to get complete tag list.
 
         Args:
             repo_path: Repository path (e.g., 'redhat/openjdk/openjdk21-ubi9')
+            per_page: Number of tags per page (default: 100, GitLab max)
 
         Returns:
-            List of tag names, or None if unable to fetch
+            List of all tag names, or None if unable to fetch
         """
         # GitLab API endpoint for repository tags
         # URL encode the repo path for the API
         encoded_path = repo_path.replace("/", "%2F")
-        url = f"{self.repo_url}/api/v4/projects/dsop%2F{encoded_path}/repository/tags"
+        base_url = f"{self.repo_url}/api/v4/projects/dsop%2F{encoded_path}/repository/tags"
 
-        try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "IronBank-Tree-Traversal/1.0"
-            })
-            with urllib.request.urlopen(req, timeout=30) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                return [tag.get("name", "") for tag in data if tag.get("name")]
-        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
-            return None
+        all_tags = []
+        page = 1
+
+        while True:
+            url = f"{base_url}?per_page={per_page}&page={page}"
+            try:
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "IronBank-Tree-Traversal/1.0"
+                })
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+
+                    # Empty list means no more pages
+                    if not data:
+                        break
+
+                    # Extract tag names from this page
+                    page_tags = [tag.get("name", "") for tag in data if tag.get("name")]
+                    all_tags.extend(page_tags)
+
+                    # If we got fewer than per_page, this is the last page
+                    if len(data) < per_page:
+                        break
+
+                    page += 1
+
+            except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
+                # If first page fails, return None; otherwise return what we have
+                if page == 1:
+                    return None
+                break
+
+        return all_tags if all_tags else None
 
     def populate_update_status(self, node: ContainerNode) -> None:
         """
@@ -392,24 +419,27 @@ class IronBankTreeTraversal:
         # Determine if start_path is a local file or repository and normalize
         # the path BEFORE cycle detection so we use canonical repo identifiers
         manifest_content = None
+        is_local_file = os.path.isfile(start_path)
 
-        if os.path.isfile(start_path):
+        if is_local_file:
             # For local files, use absolute path as canonical identifier
             repo_path = os.path.abspath(start_path)
+            # Separate display name for presentation (keeps repo_path unique)
+            display_repo_path = "local"
         else:
             # Normalize repository path to canonical form
             repo_path = self.normalize_repo_path(start_path)
+            display_repo_path = repo_path
 
-        # Check for cycles using normalized path
+        # Check for cycles using normalized path (unique for each file)
         if repo_path in self.visited:
             return None
         self.visited.add(repo_path)
 
         # Now fetch the manifest content
-        if os.path.isfile(start_path):
+        if is_local_file:
             with open(start_path, 'r') as f:
                 manifest_content = f.read()
-            repo_path = "local"  # Reset for display purposes
         else:
             try:
                 manifest_content = self.fetch_manifest_from_repo(repo_path)
@@ -427,8 +457,8 @@ class IronBankTreeTraversal:
 
         if manifest_content is None:
             node = ContainerNode(
-                name=repo_path.split("/")[-1],
-                repository=repo_path,
+                name=display_repo_path.split("/")[-1],
+                repository=repo_path,  # Keep unique path for edges
                 current_tag="unknown",
                 status=ContainerStatus.NOT_FOUND,
                 depth=depth,
@@ -442,8 +472,8 @@ class IronBankTreeTraversal:
             manifest = self.parse_manifest(manifest_content)
         except ValueError as e:
             node = ContainerNode(
-                name=repo_path.split("/")[-1],
-                repository=repo_path,
+                name=display_repo_path.split("/")[-1],
+                repository=repo_path,  # Keep unique path for edges
                 current_tag="unknown",
                 status=ContainerStatus.ERROR,
                 depth=depth,
@@ -452,8 +482,8 @@ class IronBankTreeTraversal:
             self.tree.add_node(node)
             return node
 
-        # Extract information
-        name = manifest.get("name", repo_path.split("/")[-1])
+        # Extract information - use display_repo_path for fallback name
+        name = manifest.get("name", display_repo_path.split("/")[-1])
         tags = manifest.get("tags", [])
         current_tag = tags[0] if tags else "latest"
         base_image, base_tag, base_registry = self.extract_base_info(manifest)
