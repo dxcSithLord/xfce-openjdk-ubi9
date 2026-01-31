@@ -7,8 +7,6 @@ name: "opensource/xfce/xfce-openjdk21"
 # The most specific version should be the first tag and will be shown
 # on ironbank.dso.mil
 tags:
-- "4.18-openjdk21.0.5-ubi9.6"
-- "4.18-openjdk21.0.5"
 - "4.18-openjdk21"
 - "latest"
 
