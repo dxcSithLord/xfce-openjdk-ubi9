@@ -4,7 +4,7 @@
 
 ARG BASE_REGISTRY=registry1.dso.mil
 ARG BASE_IMAGE=ironbank/redhat/openjdk/openjdk21-runtime-ubi9-slim
-ARG BASE_TAG=1.21
+ARG BASE_TAG=1.21.arm64
 
 FROM ${BASE_REGISTRY}/${BASE_IMAGE}:${BASE_TAG}
 
