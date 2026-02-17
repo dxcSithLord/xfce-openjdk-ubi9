@@ -2,6 +2,40 @@
 
 This file configures Claude Code skills and behaviors for this repository.
 
+## Development Guidelines
+
+### Workflow Principles
+
+- **Think First**: Always analyze the problem and read relevant codebase files before making changes
+- **Verify Before Changes**: Check in before making any major changes to confirm the plan
+- **Never Speculate**: If a specific file is referenced, read it before answering. Never make claims about code without investigating first
+- **High-Level Communication**: Provide concise, high-level explanations of changes made
+
+### Code Quality Standards
+
+- **Simplicity First**: Make every task and code change as simple as possible
+- **Minimal Impact**: Every change should impact as little code as possible
+- **Security Focus**: Apply defensive coding practices and security checks from NIST, OWASP to at least FIPS 140-2 standard
+- **Coding Standards**: Comply with good coding standards appropriate for the file type
+- **Readability**: Prioritize code readability and maintainability
+
+### Documentation Requirements
+
+- **Architecture Documentation**: Maintain documentation describing how the application architecture works inside and out
+- **Diagram Format**: All diagrams must be in Mermaid markdown format
+
+### Verification Practices
+
+- **Version Verification**: Verify the current date against any references to "latest" and confirm assumptions about most recent versions from trusted sources
+- **Trust Validation**: Ask for clarification if unable to determine trust of source
+
+### Development Process
+
+1. Create a plan first and ask for confirmation before generating code
+2. Consider relevant skills available for the task
+3. Ensure code meets appropriate security and coding standards
+4. Keep changes simple and focused
+
 ## Skills
 
 ### Iron Bank Tree Traversal
